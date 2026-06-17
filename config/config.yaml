@@ -44,8 +44,8 @@ live:
   quote_asset: "USDT"
   reward_mult: 1.5            # take-profit distance as a multiple of the stop distance
 
-# Exchange: "us" -> api.binance.us (Binance.US), "com" -> api.binance.com.
-exchange_tld: "us"
+# Exchange: "com" -> api.binance.com (Binance global), "us" -> api.binance.us.
+exchange_tld: "com"
 
 # Operational.
 poll_seconds: 60

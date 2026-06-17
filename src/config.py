@@ -93,7 +93,7 @@ class Settings(BaseModel):
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
     live: LiveConfig = Field(default_factory=LiveConfig)
-    exchange_tld: str = "us"      # "us" -> api.binance.us, "com" -> api.binance.com
+    exchange_tld: str = "com"     # "com" -> api.binance.com, "us" -> api.binance.us
     poll_seconds: int = 60
     log_level: str = "INFO"
 
