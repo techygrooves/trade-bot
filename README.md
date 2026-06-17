@@ -43,7 +43,8 @@ full buy/sell cycle before pointing at live funds.
 > "restricted location" error, run from an allowed host/region.
 
 **Deploying for real:** see [`DEPLOY.md`](./DEPLOY.md) for a copy-paste VPS setup
-(systemd `--loop`, testnet-first, then live).
+(systemd `--loop`, testnet-first, then live). For **free 24/7 hosting**, see
+[`ORACLE_SETUP.md`](./ORACLE_SETUP.md) (Oracle Cloud Always Free).
 
 ## Backtesting
 ```bash
