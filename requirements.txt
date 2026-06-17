@@ -1,0 +1,20 @@
+# Core
+python-binance==1.0.19
+pandas==2.2.2
+numpy==1.26.4
+pandas-ta==0.3.14b0
+
+# Config & env
+pydantic==2.7.1
+pydantic-settings==2.2.1
+PyYAML==6.0.1
+python-dotenv==1.0.1
+
+# Scheduling
+APScheduler==3.10.4
+
+# Notifications
+python-telegram-bot==21.0.1
+
+# Dev / testing
+pytest==8.2.0

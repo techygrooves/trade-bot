@@ -1,0 +1,38 @@
+# Non-secret bot configuration. Secrets live in .env.
+
+# Markets to trade (high-liquidity USDT pairs to start).
+symbols:
+  - BTCUSDT
+  - ETHUSDT
+
+# Candle intervals.
+timeframes:
+  signal: "1h"   # primary entry/exit signal
+  trend: "4h"    # higher-timeframe trend filter
+
+# How many historical candles to pull per symbol/timeframe.
+history_candles: 500
+
+# Strategy parameters (used from Phase 1 onward).
+strategy:
+  ema_fast: 20
+  ema_slow: 50
+  ema_trend: 200
+  rsi_period: 14
+  rsi_lower: 40
+  rsi_upper: 60
+  adx_period: 14
+  adx_min: 20
+  atr_period: 14
+  atr_stop_mult: 2.0
+
+# Risk management (used from Phase 3 onward).
+risk:
+  risk_per_trade_pct: 1.0     # % of equity risked per trade
+  max_open_positions: 3
+  daily_loss_limit_pct: 5.0   # halt trading if daily drawdown exceeds this
+  taker_fee_pct: 0.1
+
+# Operational.
+poll_seconds: 60
+log_level: "INFO"
