@@ -30,12 +30,22 @@ strategy:
   macd_signal: 9
   vol_ma_period: 20    # entry candle volume must exceed this rolling average
 
-# Risk management (used from Phase 3 onward).
+# Risk management.
 risk:
-  risk_per_trade_pct: 1.0     # % of equity risked per trade
+  risk_per_trade_pct: 1.0     # % of equity risked per trade (risk_pct mode)
   max_open_positions: 3
-  daily_loss_limit_pct: 5.0   # halt trading if daily drawdown exceeds this
+  daily_loss_limit_pct: 5.0   # halt trading if daily realized loss exceeds this
   taker_fee_pct: 0.1
+
+# Live trading.
+live:
+  sizing_mode: "fixed_budget" # "fixed_budget" for tiny capital, else "risk_pct"
+  trade_budget_usdt: 10.0     # USDT spent per trade in fixed_budget mode
+  quote_asset: "USDT"
+  reward_mult: 1.5            # take-profit distance as a multiple of the stop distance
+
+# Exchange: "com" -> api.binance.com (Binance global), "us" -> api.binance.us.
+exchange_tld: "com"
 
 # Operational.
 poll_seconds: 60

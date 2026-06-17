@@ -10,9 +10,49 @@ strategy, architecture, and roadmap.
 > live keys: enable spot trading, **disable withdrawals**.
 
 ## Status
-**Phase 0 — scaffold.** Config/env loading, logging, Binance testnet
-connectivity, and OHLCV fetching are in place. Strategy, risk, execution, and
-the live loop come in later phases (see `PLAN.md`).
+- **Phase 0 ✅** scaffold: config/env loading, logging, Binance client, OHLCV fetch.
+- **Phase 1 ✅** indicators (EMA/RSI/MACD/ATR/ADX) + trend-momentum signal engine.
+- **Phase 2 ✅** event-driven backtester with risk-based sizing, fees, and metrics.
+- **Phase 3 ✅** live execution engine: orders (Binance.US/.com), tiny-capital
+  sizing, software stop/take-profit, daily-loss kill switch, Telegram alerts,
+  crash-safe position persistence.
+
+## Live trading
+```bash
+python -m src.bot --scan    # print current signals, place NO orders
+python -m src.bot --once    # one live decision cycle (safe for cron)
+python -m src.bot --loop    # run continuously (needs an always-on host)
+```
+Config: `exchange_tld` (`com` → binance.com global [default], `us` → Binance.US),
+`live.sizing_mode` (`fixed_budget` for small capital), `live.trade_budget_usdt`.
+Keys/testnet come from env vars (`BINANCE_API_KEY`, `BINANCE_API_SECRET`,
+`BINANCE_TESTNET`).
+
+**Validate first on the testnet.** binance.com has a full spot testnet at
+`testnet.binance.vision` — get keys there, set `BINANCE_TESTNET=true`, and run a
+full buy/sell cycle before pointing at live funds.
+
+> ⚠️ **Two hard limitations, read before using real money:**
+> 1. **Stops are software-managed** — the engine must be running to enforce them.
+>    Don't leave an open position with the bot stopped.
+> 2. **An ephemeral cloud session is NOT a 24/7 host.** It is reclaimed after
+>    inactivity. For real continuous trading, run `--loop` on an always-on host
+>    (e.g. a small VPS).
+>
+> Note: binance.com geo-restricts some regions/datacenter IPs. If you hit a
+> "restricted location" error, run from an allowed host/region.
+
+## Backtesting
+```bash
+# From Binance public history (needs data.binance.vision on the egress allowlist):
+python -m src.backtest --symbol BTCUSDT --start 2023-01 --end 2024-12
+
+# From a local CSV of signal-interval candles:
+python -m src.backtest --csv data/BTCUSDT-1h.csv --symbol BTCUSDT
+```
+The backtester reports win rate, profit factor, expectancy (R), total return, and
+max drawdown. It avoids lookahead (decisions use closed candles; fills at the next
+bar's open) and is spot-only (no leverage; equity can't go negative).
 
 ## Setup
 ```bash
