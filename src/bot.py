@@ -14,6 +14,7 @@ from src.config import load_config
 from src.data.market_data import MarketData
 from src.exchange.binance_client import BinanceClient
 from src.logging_setup import setup_logging
+from src.strategy.signals import generate_signal
 
 
 def main() -> None:
@@ -37,14 +38,19 @@ def main() -> None:
         )
 
     market = MarketData(client, config.settings)
+    strategy_cfg = config.settings.strategy
     for symbol, data in market.fetch_all().items():
-        last = data.signal.iloc[-1]
+        signal = generate_signal(symbol, data.signal, data.trend, strategy_cfg)
         logger.info(
-            "%s last %s close=%.2f volume=%.2f",
-            symbol, config.settings.timeframes.signal, last["close"], last["volume"],
+            "%s -> %s @ %.2f | stop %s | %s",
+            symbol,
+            signal.action.value,
+            signal.price,
+            f"{signal.stop_price:.2f}" if signal.stop_price else "n/a",
+            "; ".join(signal.reasons) or "all conditions met",
         )
 
-    logger.info("=== Phase 0 scaffold run complete ===")
+    logger.info("=== Run complete (Phase 1: signals) ===")
 
 
 if __name__ == "__main__":

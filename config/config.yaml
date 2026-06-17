@@ -25,6 +25,10 @@ strategy:
   adx_min: 20
   atr_period: 14
   atr_stop_mult: 2.0
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  vol_ma_period: 20    # entry candle volume must exceed this rolling average
 
 # Risk management (used from Phase 3 onward).
 risk:

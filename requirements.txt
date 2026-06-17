@@ -2,7 +2,6 @@
 python-binance==1.0.19
 pandas==2.2.2
 numpy==1.26.4
-pandas-ta==0.3.14b0
 
 # Config & env
 pydantic==2.7.1

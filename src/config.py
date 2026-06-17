@@ -56,6 +56,10 @@ class StrategyConfig(BaseModel):
     adx_min: float = 20
     atr_period: int = 14
     atr_stop_mult: float = 2.0
+    macd_fast: int = 12
+    macd_slow: int = 26
+    macd_signal: int = 9
+    vol_ma_period: int = 20
 
 
 class RiskConfig(BaseModel):
