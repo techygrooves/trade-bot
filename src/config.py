@@ -69,6 +69,21 @@ class RiskConfig(BaseModel):
     taker_fee_pct: float = 0.1
 
 
+class LiveConfig(BaseModel):
+    """Live trading parameters.
+
+    `sizing_mode`:
+      - "fixed_budget": spend `trade_budget_usdt` per trade (for tiny capital,
+        where the 1%-risk model can't meet the exchange minimum order size).
+      - "risk_pct": size from RiskConfig.risk_per_trade_pct and the stop distance.
+    """
+
+    sizing_mode: str = "fixed_budget"
+    trade_budget_usdt: float = 10.0
+    quote_asset: str = "USDT"
+    reward_mult: float = 1.5      # take-profit = entry + reward_mult * stop_distance
+
+
 class Settings(BaseModel):
     """Non-secret runtime settings, loaded from config.yaml."""
 
@@ -77,6 +92,8 @@ class Settings(BaseModel):
     history_candles: int = 500
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
+    live: LiveConfig = Field(default_factory=LiveConfig)
+    exchange_tld: str = "us"      # "us" -> api.binance.us, "com" -> api.binance.com
     poll_seconds: int = 60
     log_level: str = "INFO"
 

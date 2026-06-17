@@ -13,8 +13,27 @@ strategy, architecture, and roadmap.
 - **Phase 0 ✅** scaffold: config/env loading, logging, Binance client, OHLCV fetch.
 - **Phase 1 ✅** indicators (EMA/RSI/MACD/ATR/ADX) + trend-momentum signal engine.
 - **Phase 2 ✅** event-driven backtester with risk-based sizing, fees, and metrics.
+- **Phase 3 ✅** live execution engine: orders (Binance.US/.com), tiny-capital
+  sizing, software stop/take-profit, daily-loss kill switch, Telegram alerts,
+  crash-safe position persistence.
 
-Risk/execution, the live trading loop, and Telegram alerts come next (see `PLAN.md`).
+## Live trading
+```bash
+python -m src.bot --scan    # print current signals, place NO orders
+python -m src.bot --once    # one live decision cycle (safe for cron)
+python -m src.bot --loop    # run continuously (needs an always-on host)
+```
+Config: `exchange_tld` (`us` → Binance.US, `com` → binance.com), `live.sizing_mode`
+(`fixed_budget` for small capital), `live.trade_budget_usdt`. Keys/testnet come
+from env vars (`BINANCE_API_KEY`, `BINANCE_API_SECRET`, `BINANCE_TESTNET`).
+
+> ⚠️ **Two hard limitations, read before using real money:**
+> 1. **Stops are software-managed** — the engine must be running to enforce them.
+>    Don't leave an open position with the bot stopped.
+> 2. **An ephemeral cloud session is NOT a 24/7 host.** It is reclaimed after
+>    inactivity. For real continuous trading, run `--loop` on an always-on host
+>    (e.g. a small VPS). Binance.US has no testnet; validate execution on the
+>    global testnet (`testnet.binance.vision`, `BINANCE_TESTNET=true`) first.
 
 ## Backtesting
 ```bash
