@@ -10,9 +10,23 @@ strategy, architecture, and roadmap.
 > live keys: enable spot trading, **disable withdrawals**.
 
 ## Status
-**Phase 0 — scaffold.** Config/env loading, logging, Binance testnet
-connectivity, and OHLCV fetching are in place. Strategy, risk, execution, and
-the live loop come in later phases (see `PLAN.md`).
+- **Phase 0 ✅** scaffold: config/env loading, logging, Binance client, OHLCV fetch.
+- **Phase 1 ✅** indicators (EMA/RSI/MACD/ATR/ADX) + trend-momentum signal engine.
+- **Phase 2 ✅** event-driven backtester with risk-based sizing, fees, and metrics.
+
+Risk/execution, the live trading loop, and Telegram alerts come next (see `PLAN.md`).
+
+## Backtesting
+```bash
+# From Binance public history (needs data.binance.vision on the egress allowlist):
+python -m src.backtest --symbol BTCUSDT --start 2023-01 --end 2024-12
+
+# From a local CSV of signal-interval candles:
+python -m src.backtest --csv data/BTCUSDT-1h.csv --symbol BTCUSDT
+```
+The backtester reports win rate, profit factor, expectancy (R), total return, and
+max drawdown. It avoids lookahead (decisions use closed candles; fills at the next
+bar's open) and is spot-only (no leverage; equity can't go negative).
 
 ## Setup
 ```bash

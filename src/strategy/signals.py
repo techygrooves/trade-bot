@@ -76,14 +76,87 @@ def add_trend_indicators(df: pd.DataFrame, cfg: StrategyConfig) -> pd.DataFrame:
     return out
 
 
-def _trend_is_bullish(trend_df: pd.DataFrame) -> bool:
-    last = trend_df.iloc[-1]
-    return bool(last["close"] > last["ema_trend"] and last["ema_slow"] > last["ema_trend"])
+def _trend_close_times(trend: pd.DataFrame) -> pd.Series:
+    """When each higher-TF bar's values become known (its close).
+
+    Uses an explicit `close_time` column if present, otherwise infers the bar
+    duration from the index spacing. This is what lets us align the trend frame
+    to the signal frame without lookahead: a trend bar's indicators are only
+    usable on signal bars that open at or after the trend bar has closed.
+    """
+    if "close_time" in trend.columns:
+        return pd.to_datetime(trend["close_time"])
+    idx = pd.Series(trend.index)
+    freq = idx.diff().median()
+    return idx + freq
 
 
-def _trend_is_bearish(trend_df: pd.DataFrame) -> bool:
-    last = trend_df.iloc[-1]
-    return bool(last["ema_slow"] < last["ema_trend"])
+def compute_features(
+    signal_df: pd.DataFrame, trend_df: pd.DataFrame, cfg: StrategyConfig
+) -> pd.DataFrame:
+    """Compute indicators + every entry/exit condition for the whole series.
+
+    Single source of truth for the strategy: both `generate_signal` (live, last
+    row) and the backtester (every row) consume this, so the rules can never
+    drift between live and simulated trading.
+
+    Higher-TF trend flags are aligned onto the signal timeframe by `merge_asof`
+    on the trend bars' close times, so no future information leaks in.
+    """
+    sig = add_signal_indicators(signal_df, cfg)
+    trend = add_trend_indicators(trend_df, cfg)
+
+    # Build trend flags keyed by close time, on a clean index (keep tz-aware
+    # datetimes intact — going through .values would strip the timezone and
+    # break the merge against the tz-aware signal index).
+    trend_flags = pd.DataFrame(
+        {
+            "trend_bull": (
+                (trend["close"] > trend["ema_trend"])
+                & (trend["ema_slow"] > trend["ema_trend"])
+            ).reset_index(drop=True),
+            "trend_bear": (trend["ema_slow"] < trend["ema_trend"]).reset_index(drop=True),
+            "_trend_close": _trend_close_times(trend).reset_index(drop=True),
+        }
+    ).sort_values("_trend_close")
+
+    left = sig.sort_index()
+    feats = pd.merge_asof(
+        left,
+        trend_flags,
+        left_index=True,
+        right_on="_trend_close",
+        direction="backward",
+    )
+    feats.index = left.index  # merge_asof drops the index; restore it
+    feats = feats.drop(columns=["_trend_close"])
+    feats[["trend_bull", "trend_bear"]] = (
+        feats[["trend_bull", "trend_bear"]].fillna(False).astype(bool)
+    )
+
+    feats["uptrend_intact"] = feats["ema_fast"] > feats["ema_slow"]
+    feats["ema_reclaim_up"] = (feats["close"].shift(1) <= feats["ema_fast"].shift(1)) & (
+        feats["close"] > feats["ema_fast"]
+    )
+    feats["macd_cross_up"] = (
+        feats["macd"].shift(1) <= feats["macd_signal"].shift(1)
+    ) & (feats["macd"] > feats["macd_signal"])
+    feats["momentum_ok"] = feats["ema_reclaim_up"] | feats["macd_cross_up"]
+    feats["adx_ok"] = feats["adx"] > cfg.adx_min
+    feats["rsi_ok"] = (feats["rsi"] >= cfg.rsi_lower) & (feats["rsi"] <= cfg.rsi_upper)
+    feats["vol_ok"] = feats["volume"] >= feats["vol_ma"]
+
+    feats["entry_signal"] = (
+        feats["trend_bull"]
+        & feats["uptrend_intact"]
+        & feats["momentum_ok"]
+        & feats["adx_ok"]
+        & feats["rsi_ok"]
+        & feats["vol_ok"]
+    ).fillna(False)
+    feats["exit_signal"] = feats["trend_bear"]
+    feats["stop_price"] = feats["close"] - cfg.atr_stop_mult * feats["atr"]
+    return feats
 
 
 def generate_signal(
@@ -94,64 +167,29 @@ def generate_signal(
 ) -> SignalResult:
     """Evaluate the latest closed candle and return a decision.
 
-    `signal_df` / `trend_df` are raw OHLCV frames; indicators are computed here.
+    `signal_df` / `trend_df` are raw OHLCV frames; indicators are computed here
+    via `compute_features`, so this matches the backtester exactly.
     """
-    sig = add_signal_indicators(signal_df, cfg)
-    trend = add_trend_indicators(trend_df, cfg)
-
-    last = sig.iloc[-1]
-    prev = sig.iloc[-2]
+    feats = compute_features(signal_df, trend_df, cfg)
+    last = feats.iloc[-1]
     price = float(last["close"])
     atr_val = float(last["atr"])
-    ts = sig.index[-1]
-    stop = price - cfg.atr_stop_mult * atr_val if pd.notna(atr_val) else None
+    ts = feats.index[-1]
+    stop = float(last["stop_price"]) if pd.notna(last["stop_price"]) else None
 
     # Exit takes priority: if the higher-TF trend has turned down, get out.
-    if _trend_is_bearish(trend):
+    if bool(last["exit_signal"]):
         return SignalResult(
             action=Action.EXIT, symbol=symbol, price=price, atr=atr_val,
             stop_price=stop, timestamp=ts,
             reasons=["higher-timeframe trend bearish (EMA_slow < EMA_trend)"],
         )
 
-    reasons: list[str] = []
-
-    trend_ok = _trend_is_bullish(trend)
-    if not trend_ok:
-        reasons.append("trend filter not bullish")
-
-    uptrend_intact = bool(last["ema_fast"] > last["ema_slow"])
-    if not uptrend_intact:
-        reasons.append("signal-TF uptrend not intact (EMA_fast <= EMA_slow)")
-
-    # Price reclaims the fast EMA after dipping below it: a pullback resumption.
-    ema_reclaim_up = bool(
-        prev["close"] <= prev["ema_fast"] and last["close"] > last["ema_fast"]
-    )
-    macd_cross_up = bool(
-        prev["macd"] <= prev["macd_signal"] and last["macd"] > last["macd_signal"]
-    )
-    momentum_ok = ema_reclaim_up or macd_cross_up
-    if not momentum_ok:
-        reasons.append("no momentum trigger (EMA reclaim / MACD cross)")
-
-    adx_ok = bool(pd.notna(last["adx"]) and last["adx"] > cfg.adx_min)
-    if not adx_ok:
-        reasons.append(f"ADX {last['adx']:.1f} <= {cfg.adx_min}")
-
-    rsi_ok = bool(pd.notna(last["rsi"]) and cfg.rsi_lower <= last["rsi"] <= cfg.rsi_upper)
-    if not rsi_ok:
-        reasons.append(f"RSI {last['rsi']:.1f} outside [{cfg.rsi_lower}, {cfg.rsi_upper}]")
-
-    vol_ok = bool(pd.notna(last["vol_ma"]) and last["volume"] >= last["vol_ma"])
-    if not vol_ok:
-        reasons.append("volume below average")
-
-    if trend_ok and uptrend_intact and momentum_ok and adx_ok and rsi_ok and vol_ok:
+    if bool(last["entry_signal"]):
         triggers = []
-        if ema_reclaim_up:
+        if bool(last["ema_reclaim_up"]):
             triggers.append("EMA reclaim")
-        if macd_cross_up:
+        if bool(last["macd_cross_up"]):
             triggers.append("MACD cross up")
         return SignalResult(
             action=Action.BUY, symbol=symbol, price=price, atr=atr_val,
@@ -159,6 +197,20 @@ def generate_signal(
             reasons=[f"trend up, {' & '.join(triggers)}, "
                      f"ADX {last['adx']:.1f}, RSI {last['rsi']:.1f}, volume confirmed"],
         )
+
+    reasons: list[str] = []
+    if not bool(last["trend_bull"]):
+        reasons.append("trend filter not bullish")
+    if not bool(last["uptrend_intact"]):
+        reasons.append("signal-TF uptrend not intact (EMA_fast <= EMA_slow)")
+    if not bool(last["momentum_ok"]):
+        reasons.append("no momentum trigger (EMA reclaim / MACD cross)")
+    if not bool(last["adx_ok"]):
+        reasons.append(f"ADX {last['adx']:.1f} <= {cfg.adx_min}")
+    if not bool(last["rsi_ok"]):
+        reasons.append(f"RSI {last['rsi']:.1f} outside [{cfg.rsi_lower}, {cfg.rsi_upper}]")
+    if not bool(last["vol_ok"]):
+        reasons.append("volume below average")
 
     return SignalResult(
         action=Action.HOLD, symbol=symbol, price=price, atr=atr_val,
