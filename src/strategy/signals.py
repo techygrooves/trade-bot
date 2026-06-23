@@ -130,9 +130,10 @@ def compute_features(
     )
     feats.index = left.index  # merge_asof drops the index; restore it
     feats = feats.drop(columns=["_trend_close"])
-    feats[["trend_bull", "trend_bear"]] = (
-        feats[["trend_bull", "trend_bear"]].fillna(False).astype(bool)
-    )
+    # merge_asof can leave NaNs (object dtype) before the first trend bar closes;
+    # use .where instead of .fillna to avoid pandas' deprecated downcasting path.
+    tb = feats[["trend_bull", "trend_bear"]]
+    feats[["trend_bull", "trend_bear"]] = tb.where(tb.notna(), False).astype(bool)
 
     feats["uptrend_intact"] = feats["ema_fast"] > feats["ema_slow"]
     feats["ema_reclaim_up"] = (feats["close"].shift(1) <= feats["ema_fast"].shift(1)) & (
