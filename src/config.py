@@ -69,6 +69,43 @@ class RiskConfig(BaseModel):
     taker_fee_pct: float = 0.1
 
 
+class TakeProfitLevel(BaseModel):
+    """One scaled take-profit rung.
+
+    `reward_mult`: target distance above entry as a multiple of the stop distance
+                   (the initial risk, 1R). e.g. 1.5 -> take profit at +1.5R.
+    `size_pct`:    fraction of the ORIGINAL position to close at this rung (0..1).
+    """
+
+    reward_mult: float
+    size_pct: float
+
+
+class ExitConfig(BaseModel):
+    """Exit/trade-management policy, shared by the backtester and live trader.
+
+    Implements the PLAN.md "let winners run" management:
+      * scale out at one or more take-profit rungs (`take_profits`),
+      * move the stop to breakeven once the first rung is hit
+        (`breakeven_after_first_tp`),
+      * trail the remaining runner by `atr_trail_mult` ATRs once every configured
+        rung has been hit (`trailing_enabled`).
+
+    The fractions in `take_profits` should sum to <= 1.0; whatever is left over is
+    the "runner" that rides the trailing stop / higher-timeframe trend exit.
+    """
+
+    take_profits: list[TakeProfitLevel] = Field(
+        default_factory=lambda: [
+            TakeProfitLevel(reward_mult=1.5, size_pct=0.34),
+            TakeProfitLevel(reward_mult=3.0, size_pct=0.33),
+        ]
+    )
+    breakeven_after_first_tp: bool = True
+    trailing_enabled: bool = True
+    atr_trail_mult: float = 2.0  # trailing-stop distance, in ATRs, for the runner
+
+
 class LiveConfig(BaseModel):
     """Live trading parameters.
 
@@ -81,7 +118,7 @@ class LiveConfig(BaseModel):
     sizing_mode: str = "fixed_budget"
     trade_budget_usdt: float = 10.0
     quote_asset: str = "USDT"
-    reward_mult: float = 1.5      # take-profit = entry + reward_mult * stop_distance
+    reward_mult: float = 1.5      # legacy single-target fallback (see ExitConfig)
 
 
 class Settings(BaseModel):
@@ -93,6 +130,7 @@ class Settings(BaseModel):
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
     live: LiveConfig = Field(default_factory=LiveConfig)
+    exits: ExitConfig = Field(default_factory=ExitConfig)
     exchange_tld: str = "com"     # "com" -> api.binance.com, "us" -> api.binance.us
     poll_seconds: int = 60
     log_level: str = "INFO"

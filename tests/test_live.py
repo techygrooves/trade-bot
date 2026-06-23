@@ -78,20 +78,67 @@ def test_enters_on_buy(isolated_state, settings, monkeypatch):
     assert len(ex.buys) == 1 and ex.buys[0][0] == 10.0  # spent 10 USDT
     assert t.position is not None
     assert abs(t.position.stop_price - 96.0) < 1e-9     # 100 - 2*2
-    assert abs(t.position.take_profit - 106.0) < 1e-9   # 100 + 1.5*4
+    assert abs(t.position.initial_stop - 96.0) < 1e-9
+    assert abs(t.position.risk_per_unit - 4.0) < 1e-9
+    assert abs(t.position.initial_qty - t.position.qty) < 1e-9  # full size at entry
+    assert t.position.levels_hit == 0 and not t.position.trailing_active
 
 
 def test_take_profit_exit(isolated_state, settings, monkeypatch):
+    # Tiny (10 USDT) account: a 1/3 scale-out is below the min lot/notional, so
+    # the engine gracefully banks the whole position at the first take-profit.
     ex = FakeExchange(price=100.0, usdt=10.0)
     _patch_signal(monkeypatch, _signal(Action.BUY))
     t = LiveTrader(ex, settings, "BTCUSDT")
     t.step()  # enter
-    ex.price = 106.0  # hit target
+    ex.price = 106.0  # hit first rung (+1.5R)
     _patch_signal(monkeypatch, _signal(Action.HOLD, price=106))
     assert t.step() == "exited: take-profit"
     assert len(ex.sells) == 1
     assert t.position is None
     assert t.guard.realized_today > 0
+
+
+def test_scaled_take_profit_partial(isolated_state, monkeypatch):
+    # A larger account can actually scale out: 1/3 at +1.5R, stop -> breakeven,
+    # the runner stays open.
+    from src.config import LiveConfig, Settings
+
+    settings = Settings(symbols=["BTCUSDT"], live=LiveConfig(trade_budget_usdt=1000.0))
+    ex = FakeExchange(price=100.0, usdt=2000.0)
+    _patch_signal(monkeypatch, _signal(Action.BUY, price=100, atr=2, stop=96))
+    t = LiveTrader(ex, settings, "BTCUSDT")
+    t.step()  # enter ~10 BTC
+    entry_qty = t.position.initial_qty
+    ex.price = 106.0  # +1.5R -> first rung only
+    _patch_signal(monkeypatch, _signal(Action.HOLD, price=106))
+    status = t.step()
+    assert status == "scaled out: rung 1"
+    assert t.position is not None
+    assert t.position.levels_hit == 1
+    assert abs(t.position.stop_price - 100.0) < 1e-9        # moved to breakeven
+    assert t.position.qty < entry_qty                       # partially sold
+    assert len(ex.sells) == 1
+    assert t.guard.realized_today > 0
+
+
+def test_trailing_stop_after_full_scale_out(isolated_state, monkeypatch):
+    from src.config import LiveConfig, Settings
+
+    settings = Settings(symbols=["BTCUSDT"], live=LiveConfig(trade_budget_usdt=1000.0))
+    ex = FakeExchange(price=100.0, usdt=2000.0)
+    _patch_signal(monkeypatch, _signal(Action.BUY, price=100, atr=2, stop=96))
+    t = LiveTrader(ex, settings, "BTCUSDT")
+    t.step()
+    ex.price = 113.0  # clears both rungs -> trailing arms (stop 113-2*2=109)
+    _patch_signal(monkeypatch, _signal(Action.HOLD, price=113, atr=2))
+    t.step()
+    assert t.position is not None and t.position.trailing_active
+    assert abs(t.position.stop_price - 109.0) < 1e-9
+    ex.price = 108.0  # below trailing stop -> exit the runner
+    _patch_signal(monkeypatch, _signal(Action.HOLD, price=108, atr=2))
+    assert t.step() == "exited: trailing-stop"
+    assert t.position is None
 
 
 def test_stop_loss_exit(isolated_state, settings, monkeypatch):

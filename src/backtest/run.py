@@ -59,6 +59,7 @@ def main() -> None:
     result = run_backtest(
         signal_df, trend_df, cfg.settings.strategy, cfg.settings.risk,
         initial_equity=args.initial, symbol=args.symbol,
+        exit_cfg=cfg.settings.exits,
     )
     logger.info("RESULT: %s", result.metrics.summary())
     if not result.trades.empty:

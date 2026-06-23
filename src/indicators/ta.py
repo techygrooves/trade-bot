@@ -85,8 +85,10 @@ def adx(
     plus_di = 100.0 * _rma(plus_dm, period) / atr_
     minus_di = 100.0 * _rma(minus_dm, period) / atr_
 
-    di_sum = (plus_di + minus_di).replace(0.0, pd.NA)
-    dx = 100.0 * (plus_di - minus_di).abs() / di_sum
+    di_sum = plus_di + minus_di
+    # Keep float dtype (avoid pd.NA -> object) so the downstream fillna doesn't
+    # trigger pandas' deprecated object-downcasting path.
+    dx = 100.0 * (plus_di - minus_di).abs() / di_sum.where(di_sum != 0.0)
     adx_ = _rma(dx.fillna(0.0), period)
 
     return pd.DataFrame(

@@ -42,7 +42,24 @@ live:
   sizing_mode: "fixed_budget" # "fixed_budget" for tiny capital, else "risk_pct"
   trade_budget_usdt: 10.0     # USDT spent per trade in fixed_budget mode
   quote_asset: "USDT"
-  reward_mult: 1.5            # take-profit distance as a multiple of the stop distance
+  reward_mult: 1.5            # legacy single-target fallback (see `exits` below)
+
+# Trade management / exit policy (shared by the backtester AND the live trader,
+# so simulated and live exits behave identically). "Let winners run":
+#   * scale out at each take-profit rung (size_pct = fraction of the ORIGINAL
+#     position closed at +reward_mult x the initial risk),
+#   * move the stop to breakeven after the first rung,
+#   * trail the remaining runner by atr_trail_mult ATRs after the last rung.
+# Fractions should sum to <= 1.0; the leftover is the runner.
+exits:
+  take_profits:
+    - reward_mult: 1.5
+      size_pct: 0.34
+    - reward_mult: 3.0
+      size_pct: 0.33
+  breakeven_after_first_tp: true
+  trailing_enabled: true
+  atr_trail_mult: 2.0
 
 # Exchange: "com" -> api.binance.com (Binance global), "us" -> api.binance.us.
 exchange_tld: "com"
