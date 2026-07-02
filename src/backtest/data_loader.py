@@ -78,28 +78,47 @@ def _months(start: str, end: str) -> list[str]:
     return [p.strftime("%Y-%m") for p in rng]
 
 
+def _fetch_month(symbol: str, interval: str, month: str) -> pd.DataFrame:
+    url = _VISION_URL.format(symbol=symbol.upper(), interval=interval, month=month)
+    with urlopen(url, timeout=60) as resp:  # noqa: S310 - fixed, trusted host
+        payload = resp.read()
+    with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+        name = zf.namelist()[0]
+        with zf.open(name) as fh:
+            first = fh.readline().decode().split(",")[0].strip().lower()
+        with zf.open(name) as fh:
+            if first in {"open_time", "opentime"}:
+                return pd.read_csv(fh)
+            return pd.read_csv(fh, header=None, names=_KLINE_COLUMNS)
+
+
 def load_binance_vision(
-    symbol: str, interval: str, start_month: str, end_month: str
+    symbol: str,
+    interval: str,
+    start_month: str,
+    end_month: str,
+    cache_dir: str | Path | None = None,
 ) -> pd.DataFrame:
     """Download and concatenate monthly kline dumps from data.binance.vision.
 
     `start_month`/`end_month` are "YYYY-MM". Requires network access to
     data.binance.vision (allowlist the host in the environment's egress policy).
+    With `cache_dir` set, each month is stored on disk after the first download
+    so repeated runs (e.g. parameter sweeps) work offline.
     """
     frames = []
     for month in _months(start_month, end_month):
-        url = _VISION_URL.format(symbol=symbol.upper(), interval=interval, month=month)
-        with urlopen(url, timeout=60) as resp:  # noqa: S310 - fixed, trusted host
-            payload = resp.read()
-        with zipfile.ZipFile(io.BytesIO(payload)) as zf:
-            name = zf.namelist()[0]
-            with zf.open(name) as fh:
-                first = fh.readline().decode().split(",")[0].strip().lower()
-            with zf.open(name) as fh:
-                if first in {"open_time", "opentime"}:
-                    part = pd.read_csv(fh)
-                else:
-                    part = pd.read_csv(fh, header=None, names=_KLINE_COLUMNS)
+        cached = (
+            Path(cache_dir) / f"{symbol.upper()}-{interval}-{month}.csv"
+            if cache_dir else None
+        )
+        if cached is not None and cached.exists():
+            part = pd.read_csv(cached)
+        else:
+            part = _fetch_month(symbol, interval, month)
+            if cached is not None:
+                cached.parent.mkdir(parents=True, exist_ok=True)
+                part.to_csv(cached, index=False)
         frames.append(part)
     combined = pd.concat(frames, ignore_index=True)
     return _finalize(combined)
