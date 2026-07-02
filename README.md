@@ -42,6 +42,10 @@ full buy/sell cycle before pointing at live funds.
 > Note: binance.com geo-restricts some regions/datacenter IPs. If you hit a
 > "restricted location" error, run from an allowed host/region.
 
+**Deploying for real:** see [`DEPLOY.md`](./DEPLOY.md) for a copy-paste VPS setup
+(systemd `--loop`, testnet-first, then live). For **free 24/7 hosting**, see
+[`ORACLE_SETUP.md`](./ORACLE_SETUP.md) (Oracle Cloud Always Free).
+
 ## Backtesting
 ```bash
 # From Binance public history (needs data.binance.vision on the egress allowlist):
