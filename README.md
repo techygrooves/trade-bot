@@ -70,6 +70,23 @@ the stop is assumed to fill first. Equity is marked to market every bar, so
 drawdown/Sharpe include open-trade excursions. Spot-only (no leverage; equity
 can't go negative).
 
+## Validation (Phase B)
+```bash
+# Sweep 54 configurations on 2021-2023, judge the best of each exit scheme
+# once on 2024+ (out of sample), for BTC/ETH/BNB/SOL:
+python -m src.backtest.validate --start 2021-01 --end 2025-06 --split 2024-01-01
+
+# Offline, from local CSVs named {SYMBOL}-1h.csv:
+python -m src.backtest.validate --symbols BTCUSDT ETHUSDT --csv-dir data/
+```
+The sweep only ever ranks configurations on the **train** window (before
+`--split`), applies guardrails (minimum trade count, per-symbol max-drawdown
+cap), and ranks survivors by **total R earned — not win rate**. The best
+candidate per exit scheme is then evaluated exactly once on the validation
+window; those out-of-sample numbers decide what gets shipped to live config.
+Downloaded months are cached under `data/cache/` so repeated sweeps run
+offline. Full results land in `<out>_train.csv` / `<out>_validation.csv`.
+
 ## Setup
 ```bash
 python -m venv .venv && source .venv/bin/activate

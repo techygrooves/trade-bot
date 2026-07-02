@@ -16,6 +16,7 @@ env/
 logs/*.log
 logs/*.csv
 state/
+data/
 *.sqlite
 *.db
 
