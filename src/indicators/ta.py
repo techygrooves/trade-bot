@@ -87,7 +87,9 @@ def adx(
 
     di_sum = (plus_di + minus_di).replace(0.0, pd.NA)
     dx = 100.0 * (plus_di - minus_di).abs() / di_sum
-    adx_ = _rma(dx.fillna(0.0), period)
+    # dx is object-dtype (holds pd.NA); coerce to float before fillna so
+    # pandas doesn't warn about downcasting object arrays.
+    adx_ = _rma(pd.to_numeric(dx, errors="coerce").fillna(0.0), period)
 
     return pd.DataFrame(
         {"adx": adx_.astype(float), "plus_di": plus_di, "minus_di": minus_di}

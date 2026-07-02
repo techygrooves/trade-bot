@@ -7,9 +7,10 @@ instead of mid-trade.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -67,6 +68,40 @@ class RiskConfig(BaseModel):
     max_open_positions: int = 3
     daily_loss_limit_pct: float = 5.0
     taker_fee_pct: float = 0.1
+    slippage_bps: float = 0.0     # applied to market fills (entries, stops, trend exits)
+
+
+class ExitConfig(BaseModel):
+    """Exit scheme. Used by the backtester now; the live engine adopts the
+    validated scheme in Phase C (see NEXT_STEPS.md).
+
+    scheme:
+      - "trend":    exit only on stop-loss or higher-TF trend flip.
+      - "fixed_tp": full exit at reward_mult x the stop distance (matches the
+                    current live engine's behavior).
+      - "scaled":   sell tp1_frac at tp1_r, tp2_frac at tp2_r, and manage the
+                    remainder with an ATR trailing stop (PLAN.md's target).
+    All R-multiples are relative to the initial stop distance.
+    """
+
+    scheme: Literal["trend", "fixed_tp", "scaled"] = "fixed_tp"
+    reward_mult: float = 1.5
+    tp1_r: float = 1.5
+    tp1_frac: float = 0.333
+    tp2_r: float = 3.0
+    tp2_frac: float = 0.333
+    trail_atr_mult: float = 2.0
+
+    @model_validator(mode="after")
+    def _check(self) -> "ExitConfig":
+        if not (0 < self.tp1_frac and 0 < self.tp2_frac
+                and self.tp1_frac + self.tp2_frac < 1):
+            raise ValueError("tp1_frac/tp2_frac must be positive and sum to < 1")
+        if self.tp2_r <= self.tp1_r:
+            raise ValueError("tp2_r must be greater than tp1_r")
+        if self.reward_mult <= 0 or self.tp1_r <= 0 or self.trail_atr_mult <= 0:
+            raise ValueError("reward_mult, tp1_r and trail_atr_mult must be positive")
+        return self
 
 
 class LiveConfig(BaseModel):
@@ -92,6 +127,7 @@ class Settings(BaseModel):
     history_candles: int = 500
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
+    exits: ExitConfig = Field(default_factory=ExitConfig)
     live: LiveConfig = Field(default_factory=LiveConfig)
     exchange_tld: str = "com"     # "com" -> api.binance.com, "us" -> api.binance.us
     poll_seconds: int = 60
