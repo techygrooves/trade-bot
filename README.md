@@ -49,10 +49,26 @@ python -m src.backtest --symbol BTCUSDT --start 2023-01 --end 2024-12
 
 # From a local CSV of signal-interval candles:
 python -m src.backtest --csv data/BTCUSDT-1h.csv --symbol BTCUSDT
+
+# Compare exit schemes on the same data:
+python -m src.backtest --csv data/BTCUSDT-1h.csv --exit-scheme scaled
 ```
-The backtester reports win rate, profit factor, expectancy (R), total return, and
-max drawdown. It avoids lookahead (decisions use closed candles; fills at the next
-bar's open) and is spot-only (no leverage; equity can't go negative).
+Three exit schemes are supported (`exits.scheme` in config, `--exit-scheme` to
+override): `trend` (stop or higher-TF trend flip only), `fixed_tp` (full exit
+at `reward_mult`× the stop distance — matches the live engine, so this scheme's
+backtests are evidence for live behavior), and `scaled` (partial take-profits
+at 1.5R/3R, ATR-trailing stop on the remainder).
+
+The backtester reports win rate, profit factor, expectancy (R), total return,
+max drawdown, annualized Sharpe, average holding time, and a per-exit-reason
+breakdown. Fills are kept honest: decisions use closed candles and execute at
+the next bar's open; market fills (entries, stops, trend exits) pay
+`risk.slippage_bps` while take-profit limits fill at the limit or better; stops
+are gap-aware (a bar opening through the stop fills at the open); the entry
+bar's own range is checked; and when one bar covers both stop and take-profit,
+the stop is assumed to fill first. Equity is marked to market every bar, so
+drawdown/Sharpe include open-trade excursions. Spot-only (no leverage; equity
+can't go negative).
 
 ## Setup
 ```bash

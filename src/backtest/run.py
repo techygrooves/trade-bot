@@ -18,6 +18,7 @@ from src.logging_setup import setup_logging
 
 from .data_loader import load_binance_vision, load_csv
 from .engine import run_backtest
+from .metrics import exit_reason_stats
 
 _AGG = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
 
@@ -39,6 +40,14 @@ def main() -> None:
     p.add_argument("--end", help="end month YYYY-MM (Binance Vision source)")
     p.add_argument("--csv", help="path to a CSV of signal-interval candles")
     p.add_argument("--initial", type=float, default=10_000.0)
+    p.add_argument(
+        "--exit-scheme", choices=["trend", "fixed_tp", "scaled"],
+        help="override exits.scheme from config",
+    )
+    p.add_argument(
+        "--slippage-bps", type=float,
+        help="override risk.slippage_bps from config",
+    )
     args = p.parse_args()
 
     if args.csv:
@@ -56,14 +65,25 @@ def main() -> None:
     trend_df = _resample(signal_df, args.trend_interval)
     logger.info("Loaded %d signal candles, %d trend candles", len(signal_df), len(trend_df))
 
+    exit_cfg = cfg.settings.exits
+    if args.exit_scheme:
+        exit_cfg = exit_cfg.model_copy(update={"scheme": args.exit_scheme})
+    risk_cfg = cfg.settings.risk
+    if args.slippage_bps is not None:
+        risk_cfg = risk_cfg.model_copy(update={"slippage_bps": args.slippage_bps})
+
     result = run_backtest(
-        signal_df, trend_df, cfg.settings.strategy, cfg.settings.risk,
+        signal_df, trend_df, cfg.settings.strategy, risk_cfg, exit_cfg,
         initial_equity=args.initial, symbol=args.symbol,
+    )
+    logger.info(
+        "Exit scheme: %s | slippage: %.1f bps | fee: %.3f%%",
+        exit_cfg.scheme, risk_cfg.slippage_bps, risk_cfg.taker_fee_pct,
     )
     logger.info("RESULT: %s", result.metrics.summary())
     if not result.trades.empty:
-        by_reason = result.trades["exit_reason"].value_counts().to_dict()
-        logger.info("Exit reasons: %s", by_reason)
+        logger.info("Per-exit-reason breakdown:\n%s",
+                    exit_reason_stats(result.trades).round(3).to_string())
 
 
 if __name__ == "__main__":

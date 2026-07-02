@@ -130,9 +130,11 @@ def compute_features(
     )
     feats.index = left.index  # merge_asof drops the index; restore it
     feats = feats.drop(columns=["_trend_close"])
-    feats[["trend_bull", "trend_bear"]] = (
-        feats[["trend_bull", "trend_bear"]].fillna(False).astype(bool)
-    )
+    for col in ("trend_bull", "trend_bear"):
+        # Rows before the first closed trend bar are NaN (object dtype); go
+        # through the nullable boolean dtype so fillna doesn't warn about
+        # downcasting object arrays.
+        feats[col] = feats[col].astype("boolean").fillna(False).astype(bool)
 
     feats["uptrend_intact"] = feats["ema_fast"] > feats["ema_slow"]
     feats["ema_reclaim_up"] = (feats["close"].shift(1) <= feats["ema_fast"].shift(1)) & (
