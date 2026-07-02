@@ -11,21 +11,12 @@ from __future__ import annotations
 
 import argparse
 
-import pandas as pd
-
 from src.config import load_config
 from src.logging_setup import setup_logging
 
-from .data_loader import load_binance_vision, load_csv
+from .data_loader import load_binance_vision, load_csv, resample_trend
 from .engine import run_backtest
 from .metrics import exit_reason_stats
-
-_AGG = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
-
-
-def _resample(signal_df: pd.DataFrame, trend_interval: str) -> pd.DataFrame:
-    """Build the higher-timeframe trend frame by resampling the signal frame."""
-    return signal_df.resample(trend_interval).agg(_AGG).dropna()
 
 
 def main() -> None:
@@ -62,7 +53,7 @@ def main() -> None:
         )
         signal_df = load_binance_vision(args.symbol, args.interval, args.start, args.end)
 
-    trend_df = _resample(signal_df, args.trend_interval)
+    trend_df = resample_trend(signal_df, args.trend_interval)
     logger.info("Loaded %d signal candles, %d trend candles", len(signal_df), len(trend_df))
 
     exit_cfg = cfg.settings.exits

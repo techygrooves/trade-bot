@@ -16,6 +16,8 @@ from urllib.request import urlopen
 
 import pandas as pd
 
+_TREND_AGG = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+
 _VISION_URL = (
     "https://data.binance.vision/data/spot/monthly/klines/"
     "{symbol}/{interval}/{symbol}-{interval}-{month}.zip"
@@ -58,6 +60,21 @@ def _finalize(df: pd.DataFrame) -> pd.DataFrame:
     df = df.set_index("open_time").sort_index()
     keep = [c for c in ["open", "high", "low", "close", "volume", "quote_volume", "close_time"] if c in df.columns]
     return df[keep]
+
+
+def resample_trend(signal_df: pd.DataFrame, trend_interval: str) -> pd.DataFrame:
+    """Build the higher-timeframe trend frame by resampling the signal frame."""
+    return signal_df.resample(trend_interval).agg(_TREND_AGG).dropna()
+
+
+def save_csv(df: pd.DataFrame, path: str | Path) -> None:
+    """Write OHLCV to a CSV that `load_csv` reads back losslessly."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    out = df.reset_index()
+    out["open_time"] = out["open_time"].astype("int64") // 1_000_000  # ns -> ms
+    cols = [c for c in ["open_time", "open", "high", "low", "close", "volume"] if c in out.columns]
+    out[cols].to_csv(path, index=False)
 
 
 def load_csv(path: str | Path) -> pd.DataFrame:
