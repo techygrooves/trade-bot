@@ -16,6 +16,12 @@ strategy, architecture, and roadmap.
 - **Phase 3 ✅** live execution engine: orders (Binance.US/.com), tiny-capital
   sizing, software stop/take-profit, daily-loss kill switch, Telegram alerts,
   crash-safe position persistence.
+- **Phase A ✅** honest backtester: pluggable exit schemes (trend / fixed_tp /
+  scaled), gap-aware fills, slippage, Sharpe + per-exit-reason metrics.
+- **Phase B 🚧** validation harness built (multi-symbol scheme comparison,
+  train/validation parameter sweep, expectancy/drawdown decision gate); the
+  real 2021–2025 data run is pending network access to `data.binance.vision`
+  — see "Phase B: choosing the exit scheme" below.
 
 ## Live trading
 ```bash
@@ -58,6 +64,33 @@ override): `trend` (stop or higher-TF trend flip only), `fixed_tp` (full exit
 at `reward_mult`× the stop distance — matches the live engine, so this scheme's
 backtests are evidence for live behavior), and `scaled` (partial take-profits
 at 1.5R/3R, ATR-trailing stop on the remainder).
+
+## Phase B: choosing the exit scheme
+
+One command runs the whole validation experiment — 2021–2025 multi-symbol
+backtests of all three exit schemes, a small parameter sweep picked on a train
+window and scored once on a held-out validation window, and a decision gate
+that selects by pooled expectancy, profit factor and worst drawdown (never win
+rate):
+
+```bash
+# Downloads + caches candles under data/ on first run
+# (requires data.binance.vision on the network egress allowlist),
+# then writes reports/phase_b/report.md + CSVs:
+python -m src.backtest.phase_b
+
+# Later runs work fully offline from the cache:
+python -m src.backtest.phase_b --offline
+
+# Just prefetch candles (e.g. on a machine with network) without backtesting:
+python -m src.backtest.phase_b --fetch-only
+```
+
+Defaults: BTC/ETH/BNB/SOL, 1h signal / 4h trend candles fetched from 2020-10
+(warm-up) through 2025-12, train 2021-01-01..2023-12-31, validation
+2024-01-01..2025-12-31. All windows/symbols/gates are flags — see
+`python -m src.backtest.phase_b --help`. The winning scheme + parameters get
+recorded in `NEXT_STEPS.md` and implemented live in Phase C.
 
 The backtester reports win rate, profit factor, expectancy (R), total return,
 max drawdown, annualized Sharpe, average holding time, and a per-exit-reason

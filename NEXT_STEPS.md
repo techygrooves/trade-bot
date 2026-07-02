@@ -113,6 +113,33 @@ exits live before knowing which exit scheme wins is wasted work.
    factor, and max drawdown — *not* by win rate alone. Record the chosen
    config and its out-of-sample numbers in this file.
 
+**Status: harness built, real-data run pending.**
+`src/backtest/experiment.py` + `src/backtest/phase_b.py` implement all three
+steps: baseline scheme comparison (default params, train/validation/full
+windows), a 108-combo sweep (ADX ∈ {15,20,25}, RSI band ∈ {40–60, 35–65},
+stop ∈ {1.5,2,2.5}×ATR, reward_mult ∈ {1.5,2,3} / trail ∈ {2,3}×ATR) scored on
+train only, per-scheme champions scored once on held-out validation, and a
+decision gate (pooled expectancy > 0, ≥40 train / ≥10 validation trades, worst
+single-symbol drawdown ≤ 30%) that ranks by expectancy then profit factor —
+win rate is reported but never selected on. Candles are cached under `data/`
+so the experiment reruns offline.
+
+The one thing this cloud session cannot do is fetch real candles: the
+environment's egress policy blocks `data.binance.vision` (and every other
+market-data host). To produce the real report, either allowlist
+`data.binance.vision` in the environment's network policy, or run
+`python -m src.backtest.phase_b --fetch-only` on any machine with network and
+commit nothing — just reuse its `data/` cache. Then:
+
+```bash
+python -m src.backtest.phase_b   # writes reports/phase_b/report.md + CSVs
+```
+
+**Chosen config (fill in from the real run's report.md):**
+- Winner: _pending real-data run_
+- Validation expectancy / profit factor / worst max DD: _pending_
+- Train→validation expectancy decay: _pending_
+
 ### Phase C — Harden live execution to match (~1–2 days)
 1. Implement the winning exit scheme in `LiveTrader` (scaled TP legs +
    trailing stop imply partial sells and a mutable stop in `Position` state).
